@@ -1,10 +1,11 @@
-const open = require('open');
 const crypto = require('crypto');
-const http = require('http');
-const url = require('url');
-const { setTokens, BACKEND_URL } = require('../api/client');
+const axios = require('axios');
+const { setTokens } = require('../api/client');
 const chalk = require('chalk');
 const ora = require('ora');
+const opener = require('opener');
+
+const BACKEND_URL = process.env.INSIGHTA_API_URL || 'http://localhost:3000';
 
 function generatePKCE() {
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
@@ -15,43 +16,33 @@ function generatePKCE() {
 async function login() {
   const { codeVerifier, codeChallenge } = generatePKCE();
   const state = crypto.randomBytes(16).toString('hex');
-  const authUrl = `${BACKEND_URL}/auth/github?state=${state}&code_challenge=${codeChallenge}`;
+  const authUrl = `${BACKEND_URL}/auth/github?state=${state}&code_challenge=${codeChallenge}&code_verifier=${codeVerifier}&cli=1`;
 
   const spinner = ora('Opening browser for GitHub login...').start();
-  await open(authUrl);
-  spinner.text = 'Waiting for authentication...';
+  opener(authUrl);
+  spinner.text = 'Waiting for authentication (polling)...';
 
-  const server = http.createServer(async (req, res) => {
-    const parsedUrl = url.parse(req.url, true);
-    if (parsedUrl.pathname === '/callback') {
-      const { code, state: returnedState } = parsedUrl.query;
-      if (returnedState !== state) {
-        res.end('Invalid state parameter');
-        server.close();
-        return;
-      }
-      // Exchange code + code_verifier
-      try {
-        const axios = require('axios');
-        const tokenResponse = await axios.post(`${BACKEND_URL}/auth/github/callback`, null, {
-          params: { code, code_verifier: codeVerifier }
-        });
-        const { access_token, refresh_token } = tokenResponse.data;
-        setTokens(access_token, refresh_token);
-        res.end('Login successful! You can close this window.');
-        spinner.succeed(chalk.green('Logged in successfully!'));
-        server.close();
-      } catch (err) {
-        res.end('Login failed. Check console.');
-        spinner.fail(chalk.red('Login failed.'));
-        server.close();
-      }
+  // Poll for token every 2 seconds for 2 minutes
+  let attempts = 0;
+  const pollInterval = setInterval(async () => {
+    attempts++;
+    if (attempts > 60) { // 2 minutes
+      clearInterval(pollInterval);
+      spinner.fail(chalk.red('Login timeout. Please try again.'));
+      return;
     }
-  });
-
-  server.listen(3001, () => {
-    console.log(chalk.blue(`Callback server running on http://localhost:3001`));
-  });
+    try {
+      const response = await axios.get(`${BACKEND_URL}/auth/token?state=${state}`);
+      if (response.data.status === 'success') {
+        clearInterval(pollInterval);
+        const { access_token, refresh_token } = response.data;
+        setTokens(access_token, refresh_token);
+        spinner.succeed(chalk.green('Logged in successfully!'));
+      }
+    } catch (err) {
+      // ignore 404 – token not ready yet
+    }
+  }, 2000);
 }
 
 module.exports = login;

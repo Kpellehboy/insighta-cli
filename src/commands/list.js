@@ -19,12 +19,19 @@ async function list(options) {
 
     const data = await request('GET', '/api/profiles', null, query);
     spinner.stop();
-    const table = new Table({ head: ['ID', 'Name', 'Gender', 'Age', 'Country', 'Created At'] });
+    const table = new Table({ head: ['ID (short)', 'Name', 'Gender', 'Age', 'Country', 'Created At'] });
     data.data.forEach(p => {
-      table.push([p.id.slice(0,8), p.name, p.gender, p.age, p.country_id, new Date(p.created_at).toLocaleDateString()]);
+      table.push([
+        p.id.slice(0, 8),
+        p.name,
+        p.gender,
+        p.age,
+        p.country_id,
+        new Date(p.created_at).toLocaleDateString()
+      ]);
     });
     console.log(table.toString());
-    console.log(chalk.gray(`Page ${data.page} of ${data.total_pages} | Total: ${data.total}`));
+    console.log(chalk.gray(`Page ${data.page} of ${data.total_pages} | Total profiles: ${data.total}`));
   } catch (err) {
     spinner.fail(chalk.red(err.response?.data?.message || err.message));
   }

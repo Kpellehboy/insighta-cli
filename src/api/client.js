@@ -1,31 +1,38 @@
 const axios = require('axios');
 const { loadTokens, saveTokens } = require('../auth/tokenManager');
 
-const BACKEND_URL = process.env.INSIGHTA_API_URL || 'https://stage-1-task-data-persistence-api-d.vercel.app';
+const BACKEND_URL = process.env.INSIGHTA_API_URL || 'http://localhost:3000';
 
 let currentTokens = loadTokens();
 
 async function request(method, endpoint, data = null, query = null) {
-  if (!currentTokens) throw new Error('Not logged in. Run `insighta login` first.');
+  if (!currentTokens || !currentTokens.accessToken) {
+    throw new Error('Not logged in. Run `insighta login` first.');
+  }
 
   const url = `${BACKEND_URL}${endpoint}`;
-  const headers = {
-    'Authorization': `Bearer ${currentTokens.accessToken}`,
-    'X-API-Version': '1',
-    'Content-Type': 'application/json'
+  let config = {
+    method,
+    url,
+    headers: {
+      'Authorization': `Bearer ${currentTokens.accessToken}`,
+      'X-API-Version': '1',
+      'Content-Type': 'application/json'
+    },
+    params: query,
+    data
   };
-  const config = { method, url, headers, data, params: query };
 
   try {
     const response = await axios(config);
     return response.data;
   } catch (error) {
     if (error.response && error.response.status === 401) {
-      // Try to refresh
+      // refresh token
       const refreshed = await refreshToken();
       if (refreshed) {
-        headers.Authorization = `Bearer ${currentTokens.accessToken}`;
-        const retryResponse = await axios({ ...config, headers });
+        config.headers.Authorization = `Bearer ${currentTokens.accessToken}`;
+        const retryResponse = await axios(config);
         return retryResponse.data;
       }
     }
@@ -36,12 +43,14 @@ async function request(method, endpoint, data = null, query = null) {
 async function refreshToken() {
   if (!currentTokens || !currentTokens.refreshToken) return false;
   try {
-    const response = await axios.post(`${BACKEND_URL}/auth/refresh`, { refresh_token: currentTokens.refreshToken });
+    const response = await axios.post(`${BACKEND_URL}/auth/refresh`, {
+      refresh_token: currentTokens.refreshToken
+    });
     const { access_token, refresh_token } = response.data;
     saveTokens(access_token, refresh_token);
     currentTokens = { accessToken: access_token, refreshToken: refresh_token };
     return true;
-  } catch (error) {
+  } catch (err) {
     return false;
   }
 }
@@ -57,4 +66,4 @@ function clearStoredTokens() {
   currentTokens = null;
 }
 
-module.exports = { request, setTokens, clearStoredTokens, BACKEND_URL };
+module.exports = { request, setTokens, clearStoredTokens };

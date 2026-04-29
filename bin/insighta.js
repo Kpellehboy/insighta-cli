@@ -15,7 +15,7 @@ program
   .version('1.0.0');
 
 program.command('login')
-  .description('Authenticate with GitHub OAuth')
+  .description('Authenticate with GitHub OAuth (PKCE)')
   .action(login);
 
 program.command('logout')
@@ -57,6 +57,11 @@ program.command('profiles-export')
   .option('--format <format>', 'Export format (csv only)')
   .option('--gender <gender>', 'Filter by gender')
   .option('--country <country>', 'Filter by country')
+  .option('--age-group <group>', 'Filter by age group')
+  .option('--min-age <age>', 'Minimum age')
+  .option('--max-age <age>', 'Maximum age')
+  .option('--sort-by <field>', 'Sort field')
+  .option('--order <order>', 'Sort order')
   .description('Export profiles to CSV')
   .action(exportCmd);
 
